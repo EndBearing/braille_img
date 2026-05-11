@@ -1,4 +1,4 @@
-# ascii-art
+# braille-img
 
 画像ファイルから点字 Unicode（U+2800〜U+28FF）を使ったアスキーアートを生成する Rust クレートです。
 CLI ツールとしても、ライブラリとしても利用できます。
@@ -16,7 +16,7 @@ CLI ツールとしても、ライブラリとしても利用できます。
 ### CLI ツールとして
 
 ```sh
-cargo install ascii-art
+cargo install braille-img
 ```
 
 ### ライブラリとして
@@ -25,13 +25,13 @@ cargo install ascii-art
 
 ```toml
 [dependencies]
-ascii-art = "0.1"
+braille-img = "0.1"
 ```
 
 ## CLI の使い方
 
 ```sh
-ascii-art [OPTIONS] <IMAGE>
+braille-img [OPTIONS] <IMAGE>
 ```
 
 ### オプション
@@ -47,22 +47,22 @@ ascii-art [OPTIONS] <IMAGE>
 
 ```sh
 # デフォルト設定で変換
-ascii-art photo.png
+braille-img photo.png
 
 # 白背景のロゴを反転して変換
-ascii-art logo.png --invert
+braille-img logo.png --invert
 
 # 高解像度 + ディザリング（写真に最適）
-ascii-art photo.png --width 160 --dither
+braille-img photo.png --width 160 --dither
 
 # ファイルに保存
-ascii-art photo.png --dither > output.txt
+braille-img photo.png --dither > output.txt
 ```
 
 ## ライブラリの使い方
 
 ```rust
-use ascii_art::{Config, DitherMode, convert};
+use braille_img::{Config, DitherMode, convert};
 
 let img = image::open("photo.png").unwrap();
 
