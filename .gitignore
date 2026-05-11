@@ -1,0 +1,8 @@
+/target
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+CLAUDE.md
+*.md
