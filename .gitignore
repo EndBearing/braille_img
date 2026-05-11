@@ -6,3 +6,4 @@
 *.webp
 CLAUDE.md
 *.md
+!README.md

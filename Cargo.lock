@@ -115,14 +115,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ascii-art"
-version = "0.1.0"
-dependencies = [
- "clap",
- "image",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -190,6 +182,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7eff00be299a18769011411c9def0d827e8f2d7bf0c3dbf53633147a8867fd1f"
 dependencies = [
  "no_std_io2",
+]
+
+[[package]]
+name = "braille-img"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "image",
 ]
 
 [[package]]

@@ -1,4 +1,4 @@
-use ascii_art::{Config, convert};
+use braille_img::{Config, DitherMode, convert};
 use clap::Parser;
 use std::path::PathBuf;
 
@@ -19,6 +19,10 @@ struct Args {
     /// 明暗を反転する
     #[arg(short, long)]
     invert: bool,
+
+    /// Bayer 4x4 ディザリングを有効にする（グラデーションの再現度が上がる）
+    #[arg(short, long)]
+    dither: bool,
 }
 
 fn main() {
@@ -31,6 +35,7 @@ fn main() {
         width: args.width,
         threshold: args.threshold,
         invert: args.invert,
+        dither: if args.dither { DitherMode::Bayer } else { DitherMode::None },
     };
     println!("{}", convert(&img, &cfg));
 }

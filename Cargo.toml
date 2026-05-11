@@ -1,12 +1,18 @@
 [package]
-name = "ascii-art"
+name = "braille-img"
 version = "0.1.0"
 edition = "2024"
+description = "Convert images to braille Unicode ASCII art"
+license = "MIT"
+keywords = ["braille", "ascii-art", "image", "cli", "terminal"]
+categories = ["command-line-utilities", "multimedia::images"]
+readme = "README.md"
+repository = "https://github.com/EndBearing/braille_img"
 
 [dependencies]
 image = "0.25"
 clap = { version = "4", features = ["derive"] }
 
 [[bin]]
-name = "ascii-art"
+name = "braille-img"
 path = "src/main.rs"
