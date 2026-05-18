@@ -1,6 +1,16 @@
 use braille_img::{Config, DitherMode, convert};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
+
+#[derive(Clone, Copy, ValueEnum)]
+enum DitherArg {
+    /// ディザリングなし（デフォルト）
+    None,
+    /// Bayer 4×4 ordered dithering
+    Bayer,
+    /// Floyd-Steinberg 誤差拡散ディザリング
+    Floyd,
+}
 
 #[derive(Parser)]
 #[command(author, version, about = "画像ファイルから点字アスキーアートを生成する")]
@@ -20,9 +30,9 @@ struct Args {
     #[arg(short, long)]
     invert: bool,
 
-    /// Bayer 4x4 ディザリングを有効にする（グラデーションの再現度が上がる）
-    #[arg(short, long)]
-    dither: bool,
+    /// ディザリングモード（none / bayer / floyd）
+    #[arg(short, long, default_value = "none")]
+    dither: DitherArg,
 }
 
 fn main() {
@@ -31,11 +41,16 @@ fn main() {
         eprintln!("画像を開けませんでした: {e}");
         std::process::exit(1);
     });
+    let dither = match args.dither {
+        DitherArg::None => DitherMode::None,
+        DitherArg::Bayer => DitherMode::Bayer,
+        DitherArg::Floyd => DitherMode::FloydSteinberg,
+    };
     let cfg = Config {
         width: args.width,
         threshold: args.threshold,
         invert: args.invert,
-        dither: if args.dither { DitherMode::Bayer } else { DitherMode::None },
+        dither,
     };
     println!("{}", convert(&img, &cfg));
 }

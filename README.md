@@ -25,7 +25,7 @@ cargo install braille-img
 
 ```toml
 [dependencies]
-braille-img = "0.1"
+braille-img = "0.2"
 ```
 
 ## CLI の使い方
@@ -41,7 +41,7 @@ braille-img [OPTIONS] <IMAGE>
 | `--width <WIDTH>` | `-w` | `80` | 出力幅（点字文字数） |
 | `--threshold <THRESHOLD>` | `-t` | `128` | 輝度閾値（0〜255）。この値以下を点ありにする |
 | `--invert` | `-i` | なし | 明暗を反転する |
-| `--dither` | `-d` | なし | Bayer 4×4 ディザリングを有効にする |
+| `--dither <MODE>` | `-d` | `none` | ディザリングモード：`none` / `bayer` / `floyd` |
 
 ### 使用例
 
@@ -52,11 +52,14 @@ braille-img photo.png
 # 白背景のロゴを反転して変換
 braille-img logo.png --invert
 
-# 高解像度 + ディザリング（写真に最適）
-braille-img photo.png --width 160 --dither
+# Bayer ディザリング（格子状パターン）
+braille-img photo.png --width 160 --dither bayer
+
+# Floyd-Steinberg ディザリング（より自然な粒状感）
+braille-img photo.png --width 160 --dither floyd
 
 # ファイルに保存
-braille-img photo.png --dither > output.txt
+braille-img photo.png --dither floyd > output.txt
 ```
 
 ## ライブラリの使い方
@@ -70,12 +73,12 @@ let img = image::open("photo.png").unwrap();
 let art = convert(&img, &Config::default());
 println!("{art}");
 
-// Bayer ディザリングで変換（写真向き）
+// Floyd-Steinberg ディザリングで変換（写真向き）
 let cfg = Config {
     width: 120,
     threshold: 128,
     invert: false,
-    dither: DitherMode::Bayer,
+    dither: DitherMode::FloydSteinberg,
 };
 let art = convert(&img, &cfg);
 println!("{art}");
@@ -83,13 +86,13 @@ println!("{art}");
 
 ## ディザリングについて
 
-`--dither`（`DitherMode::Bayer`）を有効にすると、Bayer 4×4 ordered dithering によって
-中間調を点の粗密で表現します。
+`--dither` オプションで中間調の再現方法を選択できます。
 
-| モード | 向いている画像 |
-|---|---|
-| なし（デフォルト） | ロゴ・線画・文字など輪郭がくっきりした画像 |
-| Bayer | 写真・自然画像などグラデーションが多い画像 |
+| モード | CLI 値 | 特徴 | 向いている画像 |
+|---|---|---|---|
+| なし（デフォルト） | `none` | 閾値のみで判定 | ロゴ・線画・文字など輪郭がくっきりした画像 |
+| Bayer | `bayer` | 格子状パターンで中間調を表現 | グラデーションが多い画像 |
+| Floyd-Steinberg | `floyd` | 誤差拡散でより自然な粒状感 | 写真・自然画像（最も滑らかな再現） |
 
 ## ライセンス
 

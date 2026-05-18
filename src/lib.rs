@@ -68,6 +68,12 @@ pub enum DitherMode {
     /// 格子状のパターンを使って中間調を表現します。
     /// 写真や自然画像のグラデーションを滑らかに再現したい場合に有効です。
     Bayer,
+    /// Floyd-Steinberg 誤差拡散ディザリング。
+    ///
+    /// 閾値との誤差を隣接ピクセルへ拡散させることで、
+    /// Bayer より自然なランダム粒状感を持つ中間調表現が可能です。
+    /// 写真や自然画像に特に有効です。
+    FloydSteinberg,
 }
 
 /// 点字アスキーアート生成の設定です。
@@ -85,7 +91,7 @@ pub enum DitherMode {
 ///     width: 120,
 ///     threshold: 100,
 ///     invert: true,
-///     dither: DitherMode::Bayer,
+///     dither: DitherMode::FloydSteinberg,
 /// };
 /// ```
 pub struct Config {
@@ -105,7 +111,8 @@ pub struct Config {
     pub invert: bool,
     /// ディザリングモード。
     ///
-    /// [`DitherMode::Bayer`] を指定すると写真などの中間調が滑らかに表現されます。
+    /// [`DitherMode::Bayer`] または [`DitherMode::FloydSteinberg`] を指定すると
+    /// 写真などの中間調が滑らかに表現されます。
     pub dither: DitherMode,
 }
 
@@ -141,8 +148,8 @@ impl Default for Config {
 /// let art = convert(&img, &Config::default());
 /// println!("{art}");
 ///
-/// // Bayer ディザリングで変換（写真向き）
-/// let cfg = Config { dither: DitherMode::Bayer, ..Config::default() };
+/// // Floyd-Steinberg ディザリングで変換（写真向き）
+/// let cfg = Config { dither: DitherMode::FloydSteinberg, ..Config::default() };
 /// let art = convert(&img, &cfg);
 /// println!("{art}");
 /// ```
@@ -153,49 +160,103 @@ pub fn convert(img: &DynamicImage, cfg: &Config) -> String {
     let px_w = cfg.width * 2;
     // 点字1文字は 2px幅 × 4px高さ。標準端末フォント（縦横比1:2）では
     // 1画像ピクセルの物理幅 = W/2、物理高さ = 2W/4 = W/2 → 補正不要
-    let px_h = (orig_h as f64 * px_w as f64 / orig_w as f64) as u32;
-    let px_h = px_h.max(4);
+    let px_h = ((orig_h as f64 * px_w as f64 / orig_w as f64) as u32).max(4);
 
     let resized = img.resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3);
     let gray = resized.to_luma8();
+    let bitmap = build_bitmap(&gray, px_w, px_h, cfg);
 
-    let char_rows = (px_h + 3) / 4;
-    let char_cols = cfg.width;
-
+    let char_rows = px_h.div_ceil(4);
     let mut lines = Vec::with_capacity(char_rows as usize);
     for cy in 0..char_rows {
-        let mut line = String::with_capacity(char_cols as usize * 3);
-        for cx in 0..char_cols {
+        let mut line = String::with_capacity(cfg.width as usize * 3);
+        for cx in 0..cfg.width {
             let mut bits: u8 = 0;
-            for (dx, dy, bit) in &DOT_BIT {
+            for &(dx, dy, bit) in &DOT_BIT {
                 let px = cx * 2 + dx;
                 let py = cy * 4 + dy;
-                if px < px_w && py < px_h {
-                    let luma = gray.get_pixel(px, py).0[0];
-                    let effective = match cfg.dither {
-                        DitherMode::None => luma,
-                        // Bayer値 0–15 を -128〜127 にマップして輝度に加算
-                        DitherMode::Bayer => {
-                            let noise = BAYER4[py as usize % 4][px as usize % 4] * 17 - 128;
-                            (luma as i32 + noise).clamp(0, 255) as u8
-                        }
-                    };
-                    let lit = if cfg.invert {
-                        effective > cfg.threshold
-                    } else {
-                        effective <= cfg.threshold
-                    };
-                    if lit {
-                        bits |= 1 << bit;
-                    }
+                if px < px_w && py < px_h && bitmap[(py * px_w + px) as usize] {
+                    bits |= 1 << bit;
                 }
             }
-            let ch = char::from_u32(0x2800 + bits as u32).unwrap();
-            line.push(ch);
+            line.push(char::from_u32(0x2800 + bits as u32).unwrap());
         }
         lines.push(line);
     }
     lines.join("\n")
+}
+
+fn build_bitmap(gray: &image::GrayImage, px_w: u32, px_h: u32, cfg: &Config) -> Vec<bool> {
+    if cfg.dither == DitherMode::FloydSteinberg {
+        return build_bitmap_floyd_steinberg(gray, px_w, px_h, cfg);
+    }
+
+    let mut bitmap = vec![false; (px_w * px_h) as usize];
+    for py in 0..px_h {
+        for px in 0..px_w {
+            let luma = gray.get_pixel(px, py).0[0];
+            let effective = match cfg.dither {
+                DitherMode::Bayer => {
+                    let noise = BAYER4[py as usize % 4][px as usize % 4] * 17 - 128;
+                    (luma as i32 + noise).clamp(0, 255) as u8
+                }
+                _ => luma,
+            };
+            let lit = if cfg.invert {
+                effective > cfg.threshold
+            } else {
+                effective <= cfg.threshold
+            };
+            bitmap[(py * px_w + px) as usize] = lit;
+        }
+    }
+    bitmap
+}
+
+fn build_bitmap_floyd_steinberg(
+    gray: &image::GrayImage,
+    px_w: u32,
+    px_h: u32,
+    cfg: &Config,
+) -> Vec<bool> {
+    let mut buf: Vec<f32> = (0..px_h)
+        .flat_map(|y| (0..px_w).map(move |x| gray.get_pixel(x, y).0[0] as f32))
+        .collect();
+    let mut bitmap = vec![false; (px_w * px_h) as usize];
+    let threshold = cfg.threshold as f32;
+
+    for y in 0..px_h {
+        for x in 0..px_w {
+            let idx = (y * px_w + x) as usize;
+            let old_val = buf[idx].clamp(0.0, 255.0);
+            let lit = if cfg.invert {
+                old_val > threshold
+            } else {
+                old_val <= threshold
+            };
+            bitmap[idx] = lit;
+            // 誤差 = 元の値 - 量子化後の値（点あり=0、点なし=255）
+            let error = old_val - if lit { 0.0 } else { 255.0 };
+
+            // Floyd-Steinberg 誤差拡散係数
+            //          [現在]  7/16
+            //  3/16    5/16   1/16
+            if x + 1 < px_w {
+                buf[idx + 1] += error * 7.0 / 16.0;
+            }
+            if y + 1 < px_h {
+                let next = idx + px_w as usize;
+                if x > 0 {
+                    buf[next - 1] += error * 3.0 / 16.0;
+                }
+                buf[next] += error * 5.0 / 16.0;
+                if x + 1 < px_w {
+                    buf[next + 1] += error * 1.0 / 16.0;
+                }
+            }
+        }
+    }
+    bitmap
 }
 
 #[cfg(test)]
@@ -238,5 +299,16 @@ mod tests {
         let all_full = chars.iter().all(|&c| c == '\u{28FF}');
         let all_empty = chars.iter().all(|&c| c == '\u{2800}');
         assert!(!all_full && !all_empty, "Bayer dither should produce mixed output for mid-gray");
+    }
+
+    #[test]
+    fn floyd_steinberg_midgray_produces_mixed_dots() {
+        let img = make_img(8, 8, 128);
+        let cfg_dither = Config { width: 4, threshold: 128, invert: false, dither: DitherMode::FloydSteinberg };
+        let result = convert(&img, &cfg_dither);
+        let chars: Vec<char> = result.chars().filter(|c| *c != '\n').collect();
+        let all_full = chars.iter().all(|&c| c == '\u{28FF}');
+        let all_empty = chars.iter().all(|&c| c == '\u{2800}');
+        assert!(!all_full && !all_empty, "Floyd-Steinberg dither should produce mixed output for mid-gray");
     }
 }
